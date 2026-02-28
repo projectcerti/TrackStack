@@ -1,16 +1,16 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { useTrades } from '@/context/TradeContext';
+import { useAuth } from '@/context/AuthContext';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { ArrowUpRight, ArrowDownRight, TrendingUp, TrendingDown, DollarSign, Percent, RefreshCw } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, TrendingUp, TrendingDown, DollarSign, Percent, RefreshCw, CloudUpload } from 'lucide-react';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
-import { Skeleton } from '@/components/ui/skeleton';
-
 export default function Dashboard() {
-  const { trades, account, dailyStats, syncBroker, loading } = useTrades();
+  const { trades, account, dailyStats, syncBroker, syncLocalToCloud } = useTrades();
+  const { user } = useAuth();
 
   const handleSync = () => {
     const promise = syncBroker();
@@ -18,6 +18,15 @@ export default function Dashboard() {
       loading: 'Syncing with broker...',
       success: 'Trades synced successfully!',
       error: 'Error syncing trades',
+    });
+  };
+
+  const handleCloudSync = () => {
+    const promise = syncLocalToCloud();
+    toast.promise(promise, {
+      loading: 'Syncing local data to cloud...',
+      success: 'Data synced to account!',
+      error: 'Sync failed',
     });
   };
 
@@ -29,66 +38,9 @@ export default function Dashboard() {
   const grossProfit = trades.filter(t => t.pnl > 0).reduce((acc, t) => acc + t.pnl, 0);
   const grossLoss = Math.abs(trades.filter(t => t.pnl < 0).reduce((acc, t) => acc + t.pnl, 0));
   const profitFactor = grossLoss > 0 ? (grossProfit / grossLoss).toFixed(2) : grossProfit > 0 ? "∞" : "0.00";
+  const plannedTrades = trades.filter(t => t.status === 'PENDING').length;
 
   const recentTrades = trades.slice(0, 5);
-
-  if (loading) {
-    return (
-      <div className="space-y-8">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/5 pb-6">
-          <div className="space-y-2">
-            <Skeleton className="h-10 w-48" />
-            <Skeleton className="h-4 w-64" />
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="text-right space-y-1">
-              <Skeleton className="h-3 w-12 ml-auto" />
-              <Skeleton className="h-8 w-24" />
-            </div>
-            <div className="text-right border-l border-white/10 pl-4 space-y-1">
-              <Skeleton className="h-3 w-12 ml-auto" />
-              <Skeleton className="h-7 w-20" />
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map(i => (
-            <Card key={i} className="glass-card border-0 shadow-none rounded-3xl p-6 space-y-4">
-              <div className="flex justify-between">
-                <Skeleton className="h-4 w-16" />
-                <Skeleton className="h-8 w-8 rounded-full" />
-              </div>
-              <Skeleton className="h-10 w-24" />
-            </Card>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <Card className="lg:col-span-2 glass-card border-0 rounded-3xl p-6">
-            <Skeleton className="h-6 w-32 mb-2" />
-            <Skeleton className="h-4 w-48 mb-6" />
-            <Skeleton className="h-[300px] w-full" />
-          </Card>
-          <Card className="glass-card border-0 rounded-3xl p-6">
-            <Skeleton className="h-6 w-32 mb-2" />
-            <Skeleton className="h-4 w-48 mb-6" />
-            <div className="space-y-4">
-              {[1, 2, 3, 4, 5].map(i => (
-                <div key={i} className="flex justify-between">
-                  <div className="space-y-2">
-                    <Skeleton className="h-4 w-16" />
-                    <Skeleton className="h-3 w-24" />
-                  </div>
-                  <Skeleton className="h-5 w-12" />
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-8">
@@ -96,11 +48,33 @@ export default function Dashboard() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/5 pb-6">
         <div>
           <h1 className="text-4xl font-sans font-extrabold tracking-tight text-white glow-text-purple">Dashboard</h1>
-          <p className="text-sm font-mono uppercase tracking-widest text-brand-gray-med mt-2">
-            Account: {account.name} ({account.id})
-          </p>
+          <div className="flex flex-col mt-2">
+            <p className="text-sm font-mono uppercase tracking-widest text-brand-gray-med">
+              Account: {account.name}
+            </p>
+            {user && (
+              <div className="flex items-center gap-2 mt-1">
+                <p className="text-xs font-mono text-brand-purple glow-text-purple">
+                  Linked to: {user.email}
+                </p>
+                <span className="w-1 h-1 rounded-full bg-brand-lime animate-pulse shadow-glow-lime" />
+                <span className="text-[10px] font-mono text-brand-lime uppercase tracking-tighter">Cloud Active</span>
+              </div>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-4">
+          {user && (
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="font-mono text-xs uppercase tracking-wider hidden md:flex border-brand-purple/20 text-brand-purple hover:bg-brand-purple/10 rounded-full" 
+              onClick={handleCloudSync}
+            >
+              <CloudUpload className="w-3 h-3 mr-2" />
+              Sync to Cloud
+            </Button>
+          )}
           <Button variant="outline" size="sm" className="font-mono text-xs uppercase tracking-wider hidden md:flex border-white/10 text-brand-gray-med hover:bg-brand-lime/10 hover:text-brand-lime rounded-full" onClick={handleSync}>
             <RefreshCw className="w-3 h-3 mr-2" />
             Sync
@@ -142,10 +116,10 @@ export default function Dashboard() {
           icon={TrendingUp}
         />
         <KpiCard 
-          title="Total Trades" 
-          value={totalTrades.toString()} 
+          title="Planned Trades" 
+          value={plannedTrades.toString()} 
           trend="neutral"
-          icon={TrendingDown} // Just as a placeholder icon
+          icon={TrendingDown}
         />
       </div>
 
@@ -173,10 +147,7 @@ export default function Dashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#1F1F1F" vertical={false} />
                     <XAxis 
                       dataKey="date" 
-                      tickFormatter={(str) => {
-                        const d = new Date(str);
-                        return isNaN(d.getTime()) ? '' : format(d, 'MMM d');
-                      }}
+                      tickFormatter={(str) => format(new Date(str), 'MMM d')}
                       stroke="#525252"
                       fontSize={12}
                       tickLine={false}
@@ -192,11 +163,9 @@ export default function Dashboard() {
                     <Tooltip 
                       content={({ active, payload, label }) => {
                         if (active && payload && payload.length) {
-                          const d = new Date(label);
-                          const dateStr = isNaN(d.getTime()) ? 'Invalid Date' : format(d, 'MMM d, yyyy');
                           return (
                             <div className="bg-black/90 backdrop-blur-md p-3 border border-white/10 shadow-glow-lime rounded-xl">
-                              <p className="text-brand-gray-med font-mono text-xs mb-1">{dateStr}</p>
+                              <p className="text-brand-gray-med font-mono text-xs mb-1">{format(new Date(label), 'MMM d, yyyy')}</p>
                               <p className="text-brand-lime font-mono font-bold text-lg glow-text-lime">
                                 ${Number(payload[0].value).toFixed(2)}
                               </p>
@@ -245,10 +214,7 @@ export default function Dashboard() {
                   </div>
                   <div className="flex justify-between items-center text-xs text-brand-gray-med group-hover:text-brand-gray-light">
                     <span className="uppercase tracking-wider">{trade.type} • {trade.size} Lots</span>
-                    <span>{(() => {
-                      const d = new Date(trade.closeTime);
-                      return isNaN(d.getTime()) ? 'Invalid Date' : format(d, 'MMM d, HH:mm');
-                    })()}</span>
+                    <span>{format(new Date(trade.closeTime), 'MMM d, HH:mm')}</span>
                   </div>
                 </div>
               ))

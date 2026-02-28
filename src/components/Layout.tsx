@@ -10,13 +10,13 @@ import {
   Menu,
   X,
   LineChart,
-  Brain
+  Brain,
+  RefreshCw
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import ProfileSelector from '@/components/ProfileSelector';
 import { useAuth } from '@/context/AuthContext';
 import { Logo } from '@/components/Logo';
-import { Link, useLocation } from 'react-router-dom';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -24,8 +24,7 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
-  const { user, signInWithGoogle, logout } = useAuth();
-  const location = useLocation();
+  const { user, signInWithGoogle, logout, isSigningIn } = useAuth();
 
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
@@ -77,31 +76,16 @@ export default function Layout({ children }: LayoutProps) {
           </div>
 
           <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-            {navItems.map((item) => {
-              const isActive = location.pathname === item.href;
-              return (
-                <Link
-                  key={item.label}
-                  to={item.href}
-                  onClick={() => setIsSidebarOpen(false)}
-                  className={cn(
-                    "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 group border border-transparent",
-                    isActive 
-                      ? "bg-brand-lime/10 shadow-glow-lime border-brand-lime/30" 
-                      : "hover:bg-brand-lime/10 hover:shadow-glow-lime hover:border-brand-lime/30"
-                  )}
-                >
-                  <item.icon className={cn(
-                    "w-5 h-5 transition-colors",
-                    isActive ? "text-brand-lime" : "text-brand-gray-med group-hover:text-brand-lime"
-                  )} />
-                  <span className={cn(
-                    "font-mono text-sm tracking-wide uppercase transition-colors",
-                    isActive ? "text-white" : "text-brand-gray-light group-hover:text-white"
-                  )}>{item.label}</span>
-                </Link>
-              );
-            })}
+            {navItems.map((item) => (
+              <a
+                key={item.label}
+                href={item.href}
+                className="flex items-center gap-3 px-4 py-3 rounded-xl hover:bg-brand-lime/10 hover:shadow-glow-lime hover:border hover:border-brand-lime/30 transition-all duration-300 group border border-transparent"
+              >
+                <item.icon className="w-5 h-5 text-brand-gray-med group-hover:text-brand-lime transition-colors" />
+                <span className="font-mono text-sm tracking-wide uppercase text-brand-gray-light group-hover:text-white transition-colors">{item.label}</span>
+              </a>
+            ))}
           </nav>
 
           <div className="p-4 border-t border-white/10 bg-black/40">
@@ -131,10 +115,17 @@ export default function Layout({ children }: LayoutProps) {
             ) : (
               <button 
                 onClick={() => signInWithGoogle()}
-                className="flex items-center gap-3 px-4 py-3 w-full rounded-full bg-brand-lime hover:bg-brand-lime/90 transition-all text-black font-bold glow-lime"
+                disabled={isSigningIn}
+                className="flex items-center gap-3 px-4 py-3 w-full rounded-full bg-brand-lime hover:bg-brand-lime/90 transition-all text-black font-bold glow-lime disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                <LogIn className="w-5 h-5" />
-                <span className="font-mono text-sm tracking-wide uppercase">Sign In</span>
+                {isSigningIn ? (
+                  <RefreshCw className="w-5 h-5 animate-spin" />
+                ) : (
+                  <LogIn className="w-5 h-5" />
+                )}
+                <span className="font-mono text-sm tracking-wide uppercase">
+                  {isSigningIn ? 'Signing In...' : 'Sign In'}
+                </span>
               </button>
             )}
           </div>

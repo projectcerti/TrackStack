@@ -6,12 +6,21 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { format, isValid } from 'date-fns';
 import ReplayChart from '@/components/ReplayChart';
-import { PlayCircle } from 'lucide-react';
+import { PlayCircle, RefreshCw } from 'lucide-react';
 
 const ReplayMode = () => {
-  const { trades } = useTrades();
+  const { trades, loading } = useTrades();
   const [selectedTrade, setSelectedTrade] = useState<Trade | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <RefreshCw className="w-12 h-12 text-brand-lime animate-spin" />
+        <p className="font-mono text-sm uppercase tracking-widest text-brand-gray-med">Syncing your data...</p>
+      </div>
+    );
+  }
 
   const handleReplay = (trade: Trade) => {
     setSelectedTrade(trade);

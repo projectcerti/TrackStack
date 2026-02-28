@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTrades } from '@/context/TradeContext';
 import { format, isSameDay, parseISO } from 'date-fns';
-import { Filter, ChevronDown, Pencil, Trash2, X, BrainCircuit } from 'lucide-react';
+import { Filter, ChevronDown, Pencil, Trash2, X, BrainCircuit, RefreshCw } from 'lucide-react';
 import AddTradeDialog from '@/components/AddTradeDialog';
 import EditTradeDialog from '@/components/EditTradeDialog';
 import PostTradeWizard from '@/components/PostTradeWizard';
@@ -13,8 +13,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 
-import { Skeleton } from '@/components/ui/skeleton';
-
 export default function Journal() {
   const { trades, deleteTrade, deleteTrades, loading } = useTrades();
   const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
@@ -25,48 +23,21 @@ export default function Journal() {
   const [selectedTradeIds, setSelectedTradeIds] = useState<string[]>([]);
   const [isBulkDeleteOpen, setIsBulkDeleteOpen] = useState(false);
 
-  // ... (rest of the filter logic)
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/5 pb-6">
-          <div className="space-y-2">
-            <Skeleton className="h-10 w-64" />
-            <Skeleton className="h-4 w-48" />
-          </div>
-          <div className="flex items-center gap-2">
-            <Skeleton className="h-9 w-24 rounded-md" />
-            <Skeleton className="h-9 w-24 rounded-md" />
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-3 items-center py-2">
-          {[1, 2, 3, 4, 5].map(i => (
-            <Skeleton key={i} className="h-8 w-28 rounded-full" />
-          ))}
-        </div>
-
-        <div className="border border-white/10 rounded-xl overflow-hidden">
-          <div className="bg-black/60 p-4 border-b border-white/10">
-            <Skeleton className="h-4 w-full" />
-          </div>
-          <div className="p-4 space-y-4">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-              <Skeleton key={i} className="h-12 w-full" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Filter States
   const [strategyFilter, setStrategyFilter] = useState<string>('ALL');
   const [symbolFilter, setSymbolFilter] = useState<string>('ALL');
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [ratingFilter, setRatingFilter] = useState<string>('ALL');
   const [dateRangeFilter, setDateRangeFilter] = useState<string>('ALL');
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <RefreshCw className="w-12 h-12 text-brand-lime animate-spin" />
+        <p className="font-mono text-sm uppercase tracking-widest text-brand-gray-med">Syncing your data...</p>
+      </div>
+    );
+  }
 
   // Unique values for filters
   const strategies = Array.from(new Set(trades.map(t => t.strategy).filter(Boolean)));
@@ -79,9 +50,7 @@ export default function Journal() {
     if (ratingFilter !== 'ALL' && trade.setupRating !== ratingFilter) return false;
     
     if (dateRangeFilter !== 'ALL') {
-      const tradeDate = new Date(trade.openTime);
-      if (isNaN(tradeDate.getTime())) return false;
-      
+      const tradeDate = parseISO(trade.openTime);
       const today = new Date();
       
       if (dateRangeFilter === 'TODAY') {
@@ -292,12 +261,7 @@ export default function Journal() {
                   setEditingTrade(trade);
                   setIsEditOpen(true);
                 }}>
-                  <td className="px-4 py-3 font-mono text-brand-gray-med">
-                    {(() => {
-                      const d = new Date(trade.openTime);
-                      return isNaN(d.getTime()) ? 'Invalid Date' : format(d, 'MMM d, HH:mm');
-                    })()}
-                  </td>
+                  <td className="px-4 py-3 font-mono text-brand-gray-med">{format(new Date(trade.openTime), 'MMM d, HH:mm')}</td>
                   <td className="px-4 py-3 font-bold text-white">{trade.symbol}</td>
                   <td className={`px-4 py-3 font-mono text-xs uppercase ${trade.type === 'BUY' ? 'text-brand-lime' : 'text-brand-orange'}`}>{trade.type}</td>
                   <td className="px-4 py-3 font-mono text-right text-brand-gray-light">{trade.size}</td>

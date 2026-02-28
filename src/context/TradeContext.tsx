@@ -4,6 +4,7 @@ import { subDays, format, isSameDay } from 'date-fns';
 import { useAuth } from './AuthContext';
 import { db } from '@/lib/firebase';
 import { collection, doc, setDoc, deleteDoc, onSnapshot, writeBatch } from 'firebase/firestore';
+import { toast } from 'sonner';
 
 interface TradeContextType {
   trades: Trade[]; // Filtered by active account
@@ -15,10 +16,13 @@ interface TradeContextType {
   addTrade: (trade: Omit<Trade, 'id' | 'accountId' | 'pnlPercent' | 'status'> & { pnl?: number }) => void;
   editTrade: (id: string, updates: Partial<Omit<Trade, 'id' | 'accountId'>>) => void;
   deleteTrade: (id: string) => void;
-  deleteTrades: (ids: string[]) => Promise<void>;
   createAccount: (name: string, initialBalance: number, currency: string) => void;
   switchAccount: (id: string) => void;
   syncBroker: () => Promise<void>;
+  syncGoogleDrive: () => Promise<void>;
+  syncLocalToCloud: () => Promise<void>;
+  isGoogleConnected: boolean;
+  connectGoogle: () => Promise<void>;
   setInitialBalance: (amount: number) => void;
   deposit: (amount: number) => void;
   withdraw: (amount: number) => void;
@@ -99,9 +103,13 @@ export function TradeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Always persist activeAccountId preference
     localStorage.setItem('activeAccountId', activeAccountId);
-    localStorage.setItem('accounts', JSON.stringify(accounts));
-    localStorage.setItem('trades', JSON.stringify(trades));
-  }, [accounts, activeAccountId, trades]);
+
+    if (!user) {
+      // Only persist data if not logged in (Guest mode)
+      localStorage.setItem('accounts', JSON.stringify(accounts));
+      localStorage.setItem('trades', JSON.stringify(trades));
+    }
+  }, [accounts, activeAccountId, trades, user]);
 
   // Clear state on logout
   useEffect(() => {
@@ -184,24 +192,25 @@ export function TradeProvider({ children }: { children: React.ReactNode }) {
         setAccounts(newAccounts);
         
         // Immediate validation of activeAccountId to prevent "disappearing" data
-        // We check against the *new* accounts list immediately
         setActiveAccountId(prevId => {
             const exists = newAccounts.find(a => a.id === prevId);
             if (exists) return prevId;
-            console.log('[TradeContext] Active account not found in snapshot, falling back to first account');
             return newAccounts[0].id;
         });
       } else {
-        console.log('[TradeContext] No accounts found in Firestore, creating default');
-        // Initialize default account for new user
-        const defaultAccount: Account = {
-          id: 'acc_main',
-          name: 'Main Account',
-          balance: 0,
-          equity: 0,
-          currency: 'USD',
-        };
-        setDoc(doc(db, 'users', user.uid, 'accounts', defaultAccount.id), defaultAccount);
+        // Only create default if no local accounts to sync
+        const localAccounts = JSON.parse(localStorage.getItem('accounts') || '[]');
+        if (localAccounts.length === 0) {
+          console.log('[TradeContext] No accounts in cloud or local, creating default');
+          const defaultAccount: Account = {
+            id: 'acc_main',
+            name: 'Main Account',
+            balance: 0,
+            equity: 0,
+            currency: 'USD',
+          };
+          setDoc(doc(db, 'users', user.uid, 'accounts', defaultAccount.id), defaultAccount);
+        }
       }
     }, (error) => {
       console.error('[TradeContext] Firestore Accounts listener error:', error);
@@ -213,7 +222,15 @@ export function TradeProvider({ children }: { children: React.ReactNode }) {
       const newTrades = snapshot.docs.map(d => d.data() as Trade);
       // Sort by closeTime desc
       newTrades.sort((a, b) => new Date(b.closeTime).getTime() - new Date(a.closeTime).getTime());
-      setTrades(newTrades);
+      
+      // If cloud is empty but we have local trades, trigger auto-sync
+      const localTrades = JSON.parse(localStorage.getItem('trades') || '[]');
+      if (snapshot.size === 0 && localTrades.length > 0) {
+        console.log('[TradeContext] Cloud is empty, auto-syncing local trades...');
+        syncLocalToCloud();
+      } else {
+        setTrades(newTrades);
+      }
     }, (error) => {
       console.error('[TradeContext] Firestore Trades listener error:', error);
     });
@@ -547,57 +564,155 @@ export function TradeProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteTrade = async (id: string) => {
-    await deleteTrades([id]);
-  };
-
-  const deleteTrades = async (ids: string[]) => {
-    if (ids.length === 0) return;
+    const trade = trades.find(t => t.id === id);
+    if (!trade) return;
 
     if (user && db) {
       const batch = writeBatch(db);
-      const accountPnlChanges = new Map<string, number>();
+      const tradeRef = doc(db, 'users', user.uid, 'trades', id);
+      batch.delete(tradeRef);
 
-      ids.forEach(id => {
-        const trade = trades.find(t => t.id === id);
-        if (trade) {
-          const tradeRef = doc(db, 'users', user.uid, 'trades', id);
-          batch.delete(tradeRef);
-          
-          const currentChange = accountPnlChanges.get(trade.accountId) || 0;
-          accountPnlChanges.set(trade.accountId, currentChange - trade.pnl);
-        }
-      });
-
-      accountPnlChanges.forEach((pnlChange, accountId) => {
-        const account = accounts.find(a => a.id === accountId);
-        if (account) {
-          const accountRef = doc(db, 'users', user.uid, 'accounts', accountId);
-          const newBalance = account.balance + pnlChange;
-          batch.update(accountRef, { balance: newBalance, equity: newBalance });
-        }
-      });
-
+      const accountRef = doc(db, 'users', user.uid, 'accounts', trade.accountId);
+      const account = accounts.find(a => a.id === trade.accountId);
+      if (account) {
+        const newBalance = account.balance - trade.pnl;
+        batch.update(accountRef, { balance: newBalance, equity: newBalance });
+      }
       await batch.commit();
     } else {
-      const tradesToDelete = trades.filter(t => ids.includes(t.id));
-      const accountPnlChanges = new Map<string, number>();
-      
-      tradesToDelete.forEach(trade => {
-        const currentChange = accountPnlChanges.get(trade.accountId || activeAccountId) || 0;
-        accountPnlChanges.set(trade.accountId || activeAccountId, currentChange - trade.pnl);
-      });
+      setTrades(prev => prev.filter(t => t.id !== id));
+      updateAccountBalanceLocal(trade.accountId || activeAccountId, -trade.pnl);
+    }
+  };
 
-      setTrades(prev => prev.filter(t => !ids.includes(t.id)));
+  const [isGoogleConnected, setIsGoogleConnected] = useState(false);
+
+  useEffect(() => {
+    const checkGoogleStatus = async () => {
+      try {
+        const res = await fetch('/api/auth/google/status');
+        const data = await res.json();
+        setIsGoogleConnected(data.connected);
+      } catch (err) {
+        console.error('Failed to check Google status', err);
+      }
+    };
+    checkGoogleStatus();
+  }, []);
+
+  const connectGoogle = async () => {
+    try {
+      const res = await fetch('/api/auth/google/url');
+      const { url } = await res.json();
+      const width = 600;
+      const height = 700;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
       
-      accountPnlChanges.forEach((pnlChange, accountId) => {
-        updateAccountBalanceLocal(accountId, pnlChange);
+      const popup = window.open(
+        url,
+        'google_oauth',
+        `width=${width},height=${height},left=${left},top=${top}`
+      );
+
+      if (!popup) {
+        throw new Error('Popup blocked');
+      }
+
+      return new Promise<void>((resolve, reject) => {
+        const handleMessage = (event: MessageEvent) => {
+          if (event.data?.type === 'OAUTH_AUTH_SUCCESS') {
+            setIsGoogleConnected(true);
+            window.removeEventListener('message', handleMessage);
+            resolve();
+          }
+        };
+        window.addEventListener('message', handleMessage);
       });
+    } catch (error) {
+      console.error('Google connect error:', error);
+      throw error;
+    }
+  };
+
+  const syncGoogleDrive = async () => {
+    if (!isGoogleConnected) {
+      await connectGoogle();
+    }
+
+    const res = await fetch('/api/sync/google-drive', { method: 'POST' });
+    if (!res.ok) {
+      const error = await res.json();
+      throw new Error(error.error || 'Failed to sync');
+    }
+
+    const { data, fileName } = await res.json();
+    
+    // Simple mock import logic:
+    // If it's a CSV, we'd parse it. For now, let's assume it's a JSON array of trades
+    // or just show a success message if we found the file.
+    console.log('Synced data from Google Drive:', data);
+    
+    if (Array.isArray(data)) {
+      // If it's an array, try to add them
+      for (const t of data) {
+        await addTrade(t);
+      }
+    } else if (typeof data === 'string' && fileName.endsWith('.csv')) {
+      // Basic CSV parsing could go here
+      console.log('CSV data received, parsing not implemented in this demo');
+    }
+  };
+
+  const syncLocalToCloud = async () => {
+    if (!user || !db) return;
+    
+    console.log('[TradeContext] Syncing local data to cloud for:', user.email);
+    const localTrades = JSON.parse(localStorage.getItem('trades') || '[]');
+    const localAccounts = JSON.parse(localStorage.getItem('accounts') || '[]');
+
+    if (localTrades.length === 0 && localAccounts.length === 0) {
+      console.log('[TradeContext] No local data to sync');
+      return;
+    }
+
+    try {
+      const batch = writeBatch(db);
+      
+      // Sync Accounts
+      for (const acc of localAccounts) {
+        const accRef = doc(db, 'users', user.uid, 'accounts', acc.id);
+        batch.set(accRef, acc);
+      }
+
+      // Sync Trades
+      for (const trade of localTrades) {
+        const tradeRef = doc(db, 'users', user.uid, 'trades', trade.id);
+        // Sanitize
+        const sanitizedTrade = Object.entries(trade).reduce((acc, [key, value]) => {
+          if (value !== undefined) {
+            acc[key] = value;
+          }
+          return acc;
+        }, {} as any);
+        batch.set(tradeRef, sanitizedTrade);
+      }
+
+      await batch.commit();
+      console.log('[TradeContext] Local data synced to cloud successfully');
+      toast.success('Local data synced to your account!');
+      
+      // Clear local storage after successful sync to avoid double sync
+      localStorage.removeItem('trades');
+      localStorage.removeItem('accounts');
+    } catch (error) {
+      console.error('[TradeContext] Error syncing local data to cloud:', error);
+      toast.error('Failed to sync local data to cloud');
     }
   };
 
   const syncBroker = async () => {
-    // No-op for manual only mode
-    return Promise.resolve();
+    return syncGoogleDrive();
   };
 
   return (
@@ -611,10 +726,13 @@ export function TradeProvider({ children }: { children: React.ReactNode }) {
       addTrade, 
       editTrade,
       deleteTrade, 
-      deleteTrades,
       createAccount,
       switchAccount,
       syncBroker, 
+      syncGoogleDrive,
+      syncLocalToCloud,
+      isGoogleConnected,
+      connectGoogle,
       setInitialBalance, 
       deposit, 
       withdraw, 

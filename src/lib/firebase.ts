@@ -4,14 +4,22 @@ import { getFirestore } from "firebase/firestore";
 import { getAnalytics, isSupported } from "firebase/analytics";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDaqWPV1xfv9BgZcoqBCBa9ftDS1Mu4Y_w",
-  authDomain: "trade-planner-5e9e9.firebaseapp.com",
-  projectId: "trade-planner-5e9e9",
-  storageBucket: "trade-planner-5e9e9.firebasestorage.app",
-  messagingSenderId: "51519130166",
-  appId: "1:51519130166:web:c99fcb053413bdb0c02697",
-  measurementId: "G-YDNBR15HZP"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
+
+// Validate config
+const requiredKeys = ['apiKey', 'authDomain', 'projectId', 'appId'];
+const missingKeys = requiredKeys.filter(key => !firebaseConfig[key as keyof typeof firebaseConfig]);
+
+if (missingKeys.length > 0) {
+  console.warn(`[Firebase] Missing required configuration keys: ${missingKeys.join(', ')}. Some features may not work.`);
+}
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
@@ -23,9 +31,21 @@ googleProvider.setCustomParameters({
 
 let analytics: any = null;
 isSupported().then(supported => {
-  if (supported) {
-    analytics = getAnalytics(app);
+  // Only initialize analytics if supported AND we have a valid Firebase API key (starts with AIza)
+  const hasValidKey = typeof firebaseConfig.apiKey === 'string' && firebaseConfig.apiKey.startsWith('AIza');
+  
+  if (supported && hasValidKey) {
+    try {
+      analytics = getAnalytics(app);
+      console.log('[Firebase] Analytics initialized.');
+    } catch (err) {
+      console.error('[Firebase] Analytics failed to initialize:', err);
+    }
+  } else {
+    console.log('[Firebase] Analytics skipped: Not supported or invalid API key.');
   }
-}).catch(console.error);
+}).catch(err => {
+  console.error('[Firebase] Analytics support check error:', err);
+});
 
 export { analytics };

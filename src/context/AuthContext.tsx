@@ -15,53 +15,58 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [signingIn, setSigningIn] = useState(false);
 
   useEffect(() => {
     if (!auth) {
-      console.warn('[AuthContext] Firebase auth is not initialized.');
       setLoading(false);
       return;
     }
-    console.log('[AuthContext] Setting up onAuthStateChanged listener.');
+
+    // Safety timeout: if onAuthStateChanged doesn't fire within 5 seconds, 
+    // assume something is wrong and stop loading.
+    const timeoutId = setTimeout(() => {
+      if (loading) {
+        console.warn('[AuthContext] Auth state check timed out. Forcing loading to false.');
+        setLoading(false);
+      }
+    }, 5000);
+
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      console.log('[AuthContext] Auth state changed. Current user:', currentUser ? currentUser.email : 'None');
+      clearTimeout(timeoutId);
       setUser(currentUser);
-      setLoading(false);
-    }, (error) => {
-      console.error('[AuthContext] onAuthStateChanged error:', error);
       setLoading(false);
     });
     return () => {
-      console.log('[AuthContext] Cleaning up onAuthStateChanged listener.');
+      clearTimeout(timeoutId);
       unsubscribe();
     };
   }, []);
 
   const signInWithGoogle = async () => {
     if (!auth) {
-      console.error('[AuthContext] signInWithGoogle called but auth is not configured.');
       toast.error('Firebase is not configured. Please check your settings.');
       return;
     }
+    if (signingIn) return;
+
+    setSigningIn(true);
     try {
-      console.log('[AuthContext] Initiating signInWithPopup with GoogleProvider.');
-      const result = await signInWithPopup(auth, googleProvider);
-      console.log('[AuthContext] signInWithPopup successful. User:', result.user.email);
+      await signInWithPopup(auth, googleProvider);
       toast.success('Signed in successfully');
     } catch (error: any) {
-      console.error('[AuthContext] Sign in error details:', {
-        code: error.code,
-        message: error.message,
-        customData: error.customData,
-        name: error.name
-      });
+      console.error('Sign in error:', error);
+      if (error.code === 'auth/cancelled-popup-request' || error.code === 'auth/popup-closed-by-user') {
+        // Silently handle user-initiated cancellations
+        return;
+      }
       if (error.code === 'auth/unauthorized-domain') {
         toast.error(`Domain not authorized: ${window.location.hostname}. Please add this to Firebase Console.`);
-      } else if (error.code === 'auth/popup-closed-by-user') {
-        toast.error('Sign in cancelled: The popup was closed before completing the sign in.');
       } else {
         toast.error(`Sign in failed: ${error.message}`);
       }
+    } finally {
+      setSigningIn(false);
     }
   };
 

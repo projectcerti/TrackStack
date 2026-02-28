@@ -2,9 +2,10 @@ import React from 'react';
 import { useTrades } from '@/context/TradeContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { RefreshCw } from 'lucide-react';
 
 export default function Analytics() {
-  const { trades } = useTrades();
+  const { trades, loading } = useTrades();
 
   // Group trades by strategy
   const strategyStats = React.useMemo(() => {
@@ -15,6 +16,15 @@ export default function Analytics() {
     });
     return Object.entries(stats).map(([name, pnl]) => ({ name, pnl }));
   }, [trades]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <RefreshCw className="w-12 h-12 text-brand-lime animate-spin" />
+        <p className="font-mono text-sm uppercase tracking-widest text-brand-gray-med">Syncing your data...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">

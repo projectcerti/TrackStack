@@ -9,10 +9,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { ArrowUpRight, ArrowDownRight, Target, Brain, Clock, Calendar as CalendarIcon, AlertTriangle } from 'lucide-react';
+import { ArrowUpRight, ArrowDownRight, Target, Brain, Clock, Calendar as CalendarIcon, AlertTriangle, RefreshCw } from 'lucide-react';
 
 export default function Analysis() {
-  const { trades } = useTrades();
+  const { trades, loading } = useTrades();
 
   // --- 1. Tracker Score (Consistency Metric) ---
   const trackerScore = useMemo(() => {
@@ -41,6 +41,15 @@ export default function Analysis() {
 
     return Math.max(0, Math.round(score));
   }, [trades]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <RefreshCw className="w-12 h-12 text-brand-lime animate-spin" />
+        <p className="font-mono text-sm uppercase tracking-widest text-brand-gray-med">Syncing your data...</p>
+      </div>
+    );
+  }
 
   // --- 2. Profitability & Performance Metrics ---
   const performanceMetrics = useMemo(() => {
@@ -76,11 +85,7 @@ export default function Analysis() {
     let currentLosses = 0;
     
     // Sort trades by time for consecutive analysis
-    const sortedTrades = [...trades].sort((a, b) => {
-      const dateA = new Date(a.closeTime).getTime();
-      const dateB = new Date(b.closeTime).getTime();
-      return (isNaN(dateA) ? 0 : dateA) - (isNaN(dateB) ? 0 : dateB);
-    });
+    const sortedTrades = [...trades].sort((a, b) => new Date(a.closeTime).getTime() - new Date(b.closeTime).getTime());
     
     sortedTrades.forEach(t => {
         if (t.pnl > 0) {
@@ -131,9 +136,7 @@ export default function Analysis() {
     let durationCount = 0;
 
     trades.forEach(t => {
-      const date = new Date(t.openTime);
-      if (isNaN(date.getTime())) return;
-      
+      const date = parseISO(t.openTime);
       const day = getDay(date);
       const hour = getHours(date);
 
@@ -144,13 +147,11 @@ export default function Analysis() {
       hourStats[hour].trades += 1;
 
       if (t.closeTime) {
-        const close = new Date(t.closeTime);
-        if (!isNaN(close.getTime())) {
-          const duration = differenceInMinutes(close, date);
-          if (!isNaN(duration)) {
-            totalDuration += duration;
-            durationCount++;
-          }
+        const close = parseISO(t.closeTime);
+        const duration = differenceInMinutes(close, date);
+        if (!isNaN(duration)) {
+          totalDuration += duration;
+          durationCount++;
         }
       }
     });
@@ -216,15 +217,10 @@ export default function Analysis() {
     let balance = 0;
     return trades
       .slice()
-      .sort((a, b) => {
-        const dateA = new Date(a.closeTime).getTime();
-        const dateB = new Date(b.closeTime).getTime();
-        return (isNaN(dateA) ? 0 : dateA) - (isNaN(dateB) ? 0 : dateB);
-      })
+      .sort((a, b) => new Date(a.closeTime).getTime() - new Date(b.closeTime).getTime())
       .map(t => {
         balance += t.pnl;
-        const d = new Date(t.closeTime);
-        return { date: isNaN(d.getTime()) ? 'Invalid' : format(d, 'MMM d'), balance };
+        return { date: format(parseISO(t.closeTime), 'MMM d'), balance };
       });
   }, [trades]);
 

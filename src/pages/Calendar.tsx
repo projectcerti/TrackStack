@@ -14,16 +14,16 @@ import {
   endOfWeek,
   eachWeekOfInterval
 } from 'date-fns';
-import { ChevronLeft, ChevronRight, Settings, Info, Check } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Settings, Info, Check, RefreshCw } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 
 export default function Calendar() {
-  const { dailyStats } = useTrades();
+  const { dailyStats, loading } = useTrades();
   const [currentDate, setCurrentDate] = useState(new Date());
-  
+
   const [displayStats, setDisplayStats] = useState({
     rMultiple: true,
     dailyPnL: true,
@@ -33,6 +33,15 @@ export default function Calendar() {
 
   const monthStart = startOfMonth(currentDate);
   const monthEnd = endOfMonth(currentDate);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4">
+        <RefreshCw className="w-12 h-12 text-brand-lime animate-spin" />
+        <p className="font-mono text-sm uppercase tracking-widest text-brand-gray-med">Syncing your data...</p>
+      </div>
+    );
+  }
   
   // Get all weeks in the month
   const weeks = useMemo(() => {
@@ -42,10 +51,7 @@ export default function Calendar() {
   }, [monthStart, monthEnd]);
 
   const getDayStats = (date: Date) => {
-    return dailyStats.find(stat => {
-      const statDate = new Date(stat.date);
-      return !isNaN(statDate.getTime()) && isSameDay(statDate, date);
-    });
+    return dailyStats.find(stat => isSameDay(new Date(stat.date), date));
   };
 
   // Calculate Monthly Stats
