@@ -42,7 +42,10 @@ export default function Calendar() {
   }, [monthStart, monthEnd]);
 
   const getDayStats = (date: Date) => {
-    return dailyStats.find(stat => isSameDay(new Date(stat.date), date));
+    return dailyStats.find(stat => {
+      const statDate = new Date(stat.date);
+      return !isNaN(statDate.getTime()) && isSameDay(statDate, date);
+    });
   };
 
   // Calculate Monthly Stats

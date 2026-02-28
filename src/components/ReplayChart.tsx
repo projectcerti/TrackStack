@@ -141,15 +141,12 @@ const ReplayChart: React.FC<ReplayChartProps> = ({ trade }) => {
       }
 
       return () => {
-        // Cleanup logic (this return inside setTimeout is actually ignored by useEffect cleanup!)
-        // The cleanup should be in the useEffect return.
-        // But we can't access the local variables there easily.
-        // Actually, the useEffect return handles cleanup using the refs.
+        // Cleanup logic
       };
     }, 100); // 100ms delay
 
     return () => clearTimeout(timer);
-  }, [trade]);
+  }, [trade?.id]);
 
   const loadData = async (useMock = false) => {
     addLog("ReplayChart: loadData called", { useMock });

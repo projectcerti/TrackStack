@@ -99,13 +99,9 @@ export function TradeProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Always persist activeAccountId preference
     localStorage.setItem('activeAccountId', activeAccountId);
-
-    if (!user) {
-      // Only persist data if not logged in (Guest mode)
-      localStorage.setItem('accounts', JSON.stringify(accounts));
-      localStorage.setItem('trades', JSON.stringify(trades));
-    }
-  }, [accounts, activeAccountId, trades, user]);
+    localStorage.setItem('accounts', JSON.stringify(accounts));
+    localStorage.setItem('trades', JSON.stringify(trades));
+  }, [accounts, activeAccountId, trades]);
 
   // Clear state on logout
   useEffect(() => {

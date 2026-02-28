@@ -111,6 +111,9 @@ export default function EditTradeDialog({ trade, open, onOpenChange }: EditTrade
     
     // Let's stick to: Save what's in the inputs.
 
+    const parsedOpenTime = formData.openTime ? new Date(formData.openTime) : undefined;
+    const parsedCloseTime = formData.closeTime ? new Date(formData.closeTime) : undefined;
+
     editTrade(trade.id, {
       symbol: formData.symbol.toUpperCase(),
       type: formData.type as 'BUY' | 'SELL',
@@ -125,8 +128,8 @@ export default function EditTradeDialog({ trade, open, onOpenChange }: EditTrade
       notes: formData.notes,
       slStatus: formData.slStatus as any,
       movedSlPrice: formData.movedSlPrice ? Number(formData.movedSlPrice) : undefined,
-      openTime: formData.openTime ? new Date(formData.openTime).toISOString() : undefined,
-      closeTime: formData.closeTime ? new Date(formData.closeTime).toISOString() : undefined,
+      openTime: parsedOpenTime && !isNaN(parsedOpenTime.getTime()) ? parsedOpenTime.toISOString() : undefined,
+      closeTime: parsedCloseTime && !isNaN(parsedCloseTime.getTime()) ? parsedCloseTime.toISOString() : undefined,
       exits: exits
     });
 

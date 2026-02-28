@@ -76,7 +76,11 @@ export default function Analysis() {
     let currentLosses = 0;
     
     // Sort trades by time for consecutive analysis
-    const sortedTrades = [...trades].sort((a, b) => new Date(a.closeTime).getTime() - new Date(b.closeTime).getTime());
+    const sortedTrades = [...trades].sort((a, b) => {
+      const dateA = new Date(a.closeTime).getTime();
+      const dateB = new Date(b.closeTime).getTime();
+      return (isNaN(dateA) ? 0 : dateA) - (isNaN(dateB) ? 0 : dateB);
+    });
     
     sortedTrades.forEach(t => {
         if (t.pnl > 0) {
@@ -127,7 +131,9 @@ export default function Analysis() {
     let durationCount = 0;
 
     trades.forEach(t => {
-      const date = parseISO(t.openTime);
+      const date = new Date(t.openTime);
+      if (isNaN(date.getTime())) return;
+      
       const day = getDay(date);
       const hour = getHours(date);
 
@@ -138,11 +144,13 @@ export default function Analysis() {
       hourStats[hour].trades += 1;
 
       if (t.closeTime) {
-        const close = parseISO(t.closeTime);
-        const duration = differenceInMinutes(close, date);
-        if (!isNaN(duration)) {
-          totalDuration += duration;
-          durationCount++;
+        const close = new Date(t.closeTime);
+        if (!isNaN(close.getTime())) {
+          const duration = differenceInMinutes(close, date);
+          if (!isNaN(duration)) {
+            totalDuration += duration;
+            durationCount++;
+          }
         }
       }
     });
@@ -208,10 +216,15 @@ export default function Analysis() {
     let balance = 0;
     return trades
       .slice()
-      .sort((a, b) => new Date(a.closeTime).getTime() - new Date(b.closeTime).getTime())
+      .sort((a, b) => {
+        const dateA = new Date(a.closeTime).getTime();
+        const dateB = new Date(b.closeTime).getTime();
+        return (isNaN(dateA) ? 0 : dateA) - (isNaN(dateB) ? 0 : dateB);
+      })
       .map(t => {
         balance += t.pnl;
-        return { date: format(parseISO(t.closeTime), 'MMM d'), balance };
+        const d = new Date(t.closeTime);
+        return { date: isNaN(d.getTime()) ? 'Invalid' : format(d, 'MMM d'), balance };
       });
   }, [trades]);
 

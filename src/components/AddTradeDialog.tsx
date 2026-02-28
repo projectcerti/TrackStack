@@ -101,6 +101,9 @@ export default function AddTradeDialog() {
         }
     }
 
+    const parsedOpenTime = formData.openTime ? new Date(formData.openTime) : new Date();
+    const parsedCloseTime = formData.closeTime ? new Date(formData.closeTime) : new Date();
+
     addTrade({
       symbol: formData.symbol.toUpperCase(),
       type: formData.type as 'BUY' | 'SELL',
@@ -116,8 +119,8 @@ export default function AddTradeDialog() {
       slStatus: formData.slStatus as any,
       movedSlPrice: formData.movedSlPrice ? Number(formData.movedSlPrice) : undefined,
       exits: exits.map(e => ({ ...e, id: crypto.randomUUID() })),
-      openTime: new Date(formData.openTime).toISOString(),
-      closeTime: new Date(formData.closeTime).toISOString(),
+      openTime: parsedOpenTime.toISOString(),
+      closeTime: parsedCloseTime.toISOString(),
     });
 
     toast.success('Trade logged successfully');

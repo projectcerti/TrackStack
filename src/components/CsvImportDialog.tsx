@@ -8,7 +8,7 @@ import { toast } from 'sonner';
 import { Trade } from '@/types';
 
 export default function CsvImportDialog() {
-  const { addTrade } = useTrades();
+  const { bulkAddTrades } = useTrades();
   const [isOpen, setIsOpen] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [parsing, setParsing] = useState(false);
@@ -43,7 +43,7 @@ export default function CsvImportDialog() {
       const lines = text.split(/\r\n|\n/);
       
       // Smart Header Detection
-      // We score each of the first 20 lines based on how many "trading keywords" they contain.
+      // We score each of the first 40 lines based on how many "trading keywords" they contain.
       let bestHeaderIndex = 0;
       let maxKeywords = 0;
       const keywords = [
@@ -55,10 +55,14 @@ export default function CsvImportDialog() {
           'pnl', 'profit', 'loss', 'net', 'gross', 'realized'
       ];
       
-      for (let i = 0; i < Math.min(lines.length, 20); i++) {
-        const lineLower = lines[i].toLowerCase();
-        // Simple tokenization by comma or tab to avoid matching substrings too aggressively
-        // But for header detection, simple inclusion is usually fine and robust enough
+      for (let i = 0; i < Math.min(lines.length, 40); i++) {
+        const lineLower = lines[i].toLowerCase().trim();
+        
+        // Skip section headers like "Deals", "Transactions", "Summary"
+        if (lineLower === 'deals' || lineLower === 'transactions' || lineLower === 'summary' || lineLower === 'balance') {
+            continue;
+        }
+
         let count = 0;
         keywords.forEach(k => {
             if (lineLower.includes(k)) count++;
@@ -97,12 +101,20 @@ export default function CsvImportDialog() {
              
              // Check for summary keywords in the first few columns
              const firstValues = values.slice(0, 3);
-             if (firstValues.some(v => v === 'summary' || v === 'deposit' || v === 'withdrawal' || v === 'balance' || v === 'total')) {
+             const summaryKeywords = ['summary', 'deposit', 'withdrawal', 'balance', 'total', 'transactions', 'deals', 'id', 'time'];
+             if (firstValues.some(v => summaryKeywords.includes(v))) {
                  return false;
              }
              
              // Check if row is empty or just commas
-             if (values.every(v => v === '' || v === 'undefined')) return false;
+             if (values.every(v => v === '' || v === 'undefined' || v === 'null')) return false;
+
+             // If the row has a symbol but no price/size, it might be a section header that PapaParse misidentified
+             const rowKeys = Object.keys(row).map(k => k.toLowerCase());
+             const hasSymbol = rowKeys.some(k => k.includes('symbol') || k.includes('ticker')) && row[Object.keys(row).find(k => k.toLowerCase().includes('symbol'))!];
+             const hasPrice = rowKeys.some(k => k.includes('price')) && row[Object.keys(row).find(k => k.toLowerCase().includes('price'))!];
+             
+             if (hasSymbol && !hasPrice && values.filter(v => v !== '').length < 3) return false;
 
              return true;
           });
@@ -264,40 +276,28 @@ export default function CsvImportDialog() {
   const handleImport = async () => {
     if (!previewData.length) return;
 
-    let successCount = 0;
-    let failCount = 0;
-
-    let lastError = '';
+    setParsing(true);
+    const tradesToImport: any[] = [];
+    
     for (const row of previewData) {
       const tradeData = mapCsvToTrade(row);
       if (tradeData) {
-        try {
-          // @ts-ignore - addTrade signature might be slightly different in context but compatible
-          await addTrade(tradeData);
-          successCount++;
-        } catch (e) {
-          console.error("[CsvImport] Failed to add trade for row:", row, e);
-          lastError = e instanceof Error ? e.message : String(e);
-          failCount++;
-        }
-      } else {
-        console.warn("[CsvImport] Skipping invalid row (mapping returned null):", row);
-        lastError = "Row mapping failed (missing required fields like Symbol). Check console for details.";
-        failCount++;
+        tradesToImport.push(tradeData);
       }
     }
 
-    if (successCount > 0) {
-        toast.success(`Imported ${successCount} trades successfully.`);
+    try {
+      await bulkAddTrades(tradesToImport);
+      toast.success(`Imported ${tradesToImport.length} trades successfully.`);
+      setIsOpen(false);
+      setFile(null);
+      setPreviewData([]);
+    } catch (e) {
+      console.error("[CsvImport] Bulk import failed:", e);
+      toast.error("Failed to import trades. Check console for details.");
+    } finally {
+      setParsing(false);
     }
-    
-    if (failCount > 0) {
-      toast.warning(`Failed to import ${failCount} rows. Last error: ${lastError}`);
-    }
-
-    setIsOpen(false);
-    setFile(null);
-    setPreviewData([]);
   };
 
   return (

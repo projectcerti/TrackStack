@@ -7,8 +7,10 @@ import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 
+import { Skeleton } from '@/components/ui/skeleton';
+
 export default function Dashboard() {
-  const { trades, account, dailyStats, syncBroker } = useTrades();
+  const { trades, account, dailyStats, syncBroker, loading } = useTrades();
 
   const handleSync = () => {
     const promise = syncBroker();
@@ -29,6 +31,64 @@ export default function Dashboard() {
   const profitFactor = grossLoss > 0 ? (grossProfit / grossLoss).toFixed(2) : grossProfit > 0 ? "∞" : "0.00";
 
   const recentTrades = trades.slice(0, 5);
+
+  if (loading) {
+    return (
+      <div className="space-y-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/5 pb-6">
+          <div className="space-y-2">
+            <Skeleton className="h-10 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="text-right space-y-1">
+              <Skeleton className="h-3 w-12 ml-auto" />
+              <Skeleton className="h-8 w-24" />
+            </div>
+            <div className="text-right border-l border-white/10 pl-4 space-y-1">
+              <Skeleton className="h-3 w-12 ml-auto" />
+              <Skeleton className="h-7 w-20" />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map(i => (
+            <Card key={i} className="glass-card border-0 shadow-none rounded-3xl p-6 space-y-4">
+              <div className="flex justify-between">
+                <Skeleton className="h-4 w-16" />
+                <Skeleton className="h-8 w-8 rounded-full" />
+              </div>
+              <Skeleton className="h-10 w-24" />
+            </Card>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <Card className="lg:col-span-2 glass-card border-0 rounded-3xl p-6">
+            <Skeleton className="h-6 w-32 mb-2" />
+            <Skeleton className="h-4 w-48 mb-6" />
+            <Skeleton className="h-[300px] w-full" />
+          </Card>
+          <Card className="glass-card border-0 rounded-3xl p-6">
+            <Skeleton className="h-6 w-32 mb-2" />
+            <Skeleton className="h-4 w-48 mb-6" />
+            <div className="space-y-4">
+              {[1, 2, 3, 4, 5].map(i => (
+                <div key={i} className="flex justify-between">
+                  <div className="space-y-2">
+                    <Skeleton className="h-4 w-16" />
+                    <Skeleton className="h-3 w-24" />
+                  </div>
+                  <Skeleton className="h-5 w-12" />
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-8">
@@ -113,7 +173,10 @@ export default function Dashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#1F1F1F" vertical={false} />
                     <XAxis 
                       dataKey="date" 
-                      tickFormatter={(str) => format(new Date(str), 'MMM d')}
+                      tickFormatter={(str) => {
+                        const d = new Date(str);
+                        return isNaN(d.getTime()) ? '' : format(d, 'MMM d');
+                      }}
                       stroke="#525252"
                       fontSize={12}
                       tickLine={false}
@@ -129,9 +192,11 @@ export default function Dashboard() {
                     <Tooltip 
                       content={({ active, payload, label }) => {
                         if (active && payload && payload.length) {
+                          const d = new Date(label);
+                          const dateStr = isNaN(d.getTime()) ? 'Invalid Date' : format(d, 'MMM d, yyyy');
                           return (
                             <div className="bg-black/90 backdrop-blur-md p-3 border border-white/10 shadow-glow-lime rounded-xl">
-                              <p className="text-brand-gray-med font-mono text-xs mb-1">{format(new Date(label), 'MMM d, yyyy')}</p>
+                              <p className="text-brand-gray-med font-mono text-xs mb-1">{dateStr}</p>
                               <p className="text-brand-lime font-mono font-bold text-lg glow-text-lime">
                                 ${Number(payload[0].value).toFixed(2)}
                               </p>
@@ -180,7 +245,10 @@ export default function Dashboard() {
                   </div>
                   <div className="flex justify-between items-center text-xs text-brand-gray-med group-hover:text-brand-gray-light">
                     <span className="uppercase tracking-wider">{trade.type} • {trade.size} Lots</span>
-                    <span>{format(new Date(trade.closeTime), 'MMM d, HH:mm')}</span>
+                    <span>{(() => {
+                      const d = new Date(trade.closeTime);
+                      return isNaN(d.getTime()) ? 'Invalid Date' : format(d, 'MMM d, HH:mm');
+                    })()}</span>
                   </div>
                 </div>
               ))
